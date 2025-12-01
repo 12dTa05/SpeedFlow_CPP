@@ -1,0 +1,22 @@
+# SpeedFlow C++ Pipeline Configuration
+
+# Inference Configuration  
+infer_config: ../configs/config_infer_primary_yolo11.txt
+tracker_config: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_NvDCF_perf.yml
+analytics_config: ../configs/config_nvdsanalytics.txt
+homography_config: ../configs/points_source_target.yml# Muxer Settings
+muxer_width: 1280
+muxer_height: 720
+batch_size: 1
+
+# Video Settings
+video_fps: 25.0
+speed_limit_kmh: 60.0
+
+# Validation Thresholds
+min_track_age_frames: 12    # ~0.5s at 25fps
+min_world_displ_m: 0.5      # Minimum displacement in meters
+max_abs_kmh: 160.0          # Maximum physically possible speed
+bbox_area_jump: 2.5         # Max bbox area ratio change
+min_det_conf: 0.45          # Minimum detection confidence
+median_window: 5            # Median filter window size

@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package speedflow;
+
+// Object detection and tracking information
+message ObjectInfo {
+    int32 track_id = 1;
+    float speed_kmh = 2;
+    
+    // Normalized coordinates (0.0 - 1.0)
+    float bbox_x = 3;
+    float bbox_y = 4;
+    float bbox_w = 5;
+    float bbox_h = 6;
+    
+    int32 class_id = 7;
+    float confidence = 8;
+}
+
+// Frame metadata with all detected objects
+message FrameData {
+    int64 ntp_timestamp = 1;
+    int32 frame_number = 2;
+    repeated ObjectInfo objects = 3;
+}
+
+// Overspeed alert event
+message OverspeedAlert {
+    string timestamp = 1;
+    int32 track_id = 2;
+    float speed_kmh = 3;
+    bytes image_jpeg = 4;  // Optional snapshot
+}
