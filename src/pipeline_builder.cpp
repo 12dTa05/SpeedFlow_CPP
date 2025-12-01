@@ -1,4 +1,5 @@
 #include "pipeline_builder.h"
+#include "../plugins/homography.h"
 #include <iostream>
 #include <cstring>
 
@@ -22,6 +23,7 @@ PipelineBuilder::PipelineBuilder(const PipelineConfig& config)
       pgie_(nullptr),
       tracker_(nullptr),
       analytics_(nullptr),
+      speedcalc_(nullptr),
       osd_(nullptr),
       sink_(nullptr),
       is_live_source_(false) {
@@ -64,6 +66,41 @@ bool PipelineBuilder::build(const std::string& source_uri) {
     analytics_ = gst_element_factory_make("nvdsanalytics", "analytics");
     CHECK_ELEMENT(analytics_, "nvdsanalytics");
     
+    // Initialize speed calculator
+    HomographyConfig homo_config = ConfigLoader::loadHomographyConfig(
+        config_.homography_config_path,
+        config_.muxer_width,
+        config_.muxer_height
+    );
+    
+    auto transformer = std::make_shared<speedflow::ViewTransformer>(
+        homo_config.source_points,
+        homo_config.target_points
+    );
+    
+    speedflow::SpeedConfig speed_config;
+    speed_config.video_fps = config_.video_fps;
+    speed_config.speed_limit_kmh = config_.speed_limit_kmh;
+    speed_config.min_track_age_frames = config_.min_track_age_frames;
+    speed_config.min_world_displ_m = config_.min_world_displ_m;
+    speed_config.max_abs_kmh = config_.max_abs_kmh;
+    speed_config.bbox_area_jump = config_.bbox_area_jump;
+    speed_config.min_det_conf = config_.min_det_conf;
+    speed_config.median_window = config_.median_window;
+    
+    speed_calculator_ = std::make_shared<speedflow::SpeedCalculator>(transformer, speed_config);
+    
+    // Create speedcalc plugin
+    speedcalc_ = gst_element_factory_make("speedcalc", "speed-calculator");
+    CHECK_ELEMENT(speedcalc_, "speedcalc");
+    
+    // Set calculator instance
+    g_object_set(G_OBJECT(speedcalc_),
+                 "calculator", &speed_calculator_,
+                 "muxer-width", config_.muxer_width,
+                 "muxer-height", config_.muxer_height,
+                 nullptr);
+    
     osd_ = gst_element_factory_make("nvdsosd", "onscreendisplay");
     CHECK_ELEMENT(osd_, "nvdsosd");
     
@@ -102,10 +139,10 @@ bool PipelineBuilder::build(const std::string& source_uri) {
     
     // Add elements to pipeline
     gst_bin_add_many(GST_BIN(pipeline_), source_, muxer_, pgie_, tracker_,
-                     analytics_, osd_, sink_, nullptr);
+                     analytics_, speedcalc_, osd_, sink_, nullptr);
     
-    // Link static pads
-    if (!gst_element_link_many(muxer_, pgie_, tracker_, analytics_, osd_, sink_, nullptr)) {
+    // Link static pads (speedcalc inserted between analytics and osd)
+    if (!gst_element_link_many(muxer_, pgie_, tracker_, analytics_, speedcalc_, osd_, sink_, nullptr)) {
         std::cerr << "Failed to link pipeline elements" << std::endl;
         return false;
     }
@@ -130,15 +167,19 @@ GstElement* PipelineBuilder::buildSourceBin(const std::string& uri) {
     
     // Configure RTSP source if applicable
     auto on_source_setup = +[](GstElement* decodebin, GstElement* src, gpointer user_data) {
-        if (g_object_class_find_property(G_OBJECT_GET_CLASS(src), "latency")) {
-            g_object_set(G_OBJECT(src), "latency", 100, nullptr);
-        }
-        if (g_object_class_find_property(G_OBJECT_GET_CLASS(src), "drop-on-latency")) {
-            g_object_set(G_OBJECT(src), "drop-on-latency", TRUE, nullptr);
+        gboolean is_live = GPOINTER_TO_INT(user_data); // Lấy giá trị live mode ra
+        // Chỉ cấu hình latency nếu là Live Source (RTSP/Camera)
+        if (is_live) {
+            if (g_object_class_find_property(G_OBJECT_GET_CLASS(src), "latency")) {
+                g_object_set(G_OBJECT(src), "latency", 100, nullptr);
+            }
+            if (g_object_class_find_property(G_OBJECT_GET_CLASS(src), "drop-on-latency")) {
+                g_object_set(G_OBJECT(src), "drop-on-latency", TRUE, nullptr);
+            }
         }
     };
     
-    g_signal_connect(source, "source-setup", G_CALLBACK(on_source_setup), nullptr);
+    g_signal_connect(source, "source-setup", G_CALLBACK(on_source_setup), GINT_TO_POINTER(is_live_source_));
     
     std::cout << "[PipelineBuilder] Source configured: " << uri << std::endl;
     return source;
@@ -164,7 +205,7 @@ GstElement* PipelineBuilder::buildSinkBin() {
     GstElement* sink = gst_element_factory_make("tcpserversink", "mjpeg-sink");
     CHECK_ELEMENT_PTR(sink, "tcpserversink");
     
-    g_object_set(G_OBJECT(sink), "host", "0.0.0.0", "port", 8080, nullptr);
+    g_object_set(G_OBJECT(sink), "host", "0.0.0.0", "port", 8080, "sync", FALSE, "qos", FALSE, nullptr);
     
     // Create bin
     GstElement* bin = gst_bin_new("sink-bin");
@@ -208,7 +249,8 @@ void PipelineBuilder::onPadAdded(GstElement* element, GstPad* pad, gpointer data
     gst_caps_unref(caps);
 }
 
-GstPadProbeReturn PipelineBuilder::busCallback(GstBus* bus, GstMessage* msg, gpointer data) {
+gboolean PipelineBuilder::busCallback(GstBus* bus, GstMessage* msg, gpointer data) {
+    PipelineBuilder* builder = (PipelineBuilder*)data;
     switch (GST_MESSAGE_TYPE(msg)) {
         case GST_MESSAGE_EOS:
             std::cout << "[Pipeline] End of stream" << std::endl;
@@ -237,7 +279,7 @@ GstPadProbeReturn PipelineBuilder::busCallback(GstBus* bus, GstMessage* msg, gpo
         default:
             break;
     }
-    return GST_PAD_PROBE_OK;
+    return TRUE;  // GstBusFunc returns gboolean
 }
 
 bool PipelineBuilder::start() {

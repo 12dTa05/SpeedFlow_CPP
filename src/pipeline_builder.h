@@ -3,7 +3,9 @@
 
 #include <gst/gst.h>
 #include <string>
+#include <memory>
 #include "config_loader.h"
+#include "../plugins/speed_calculator.h"
 
 class PipelineBuilder {
 public:
@@ -23,7 +25,7 @@ private:
     GstElement* buildSinkBin();
     
     static void onPadAdded(GstElement* element, GstPad* pad, gpointer data);
-    static GstPadProbeReturn busCallback(GstBus* bus, GstMessage* msg, gpointer data);
+    static gboolean busCallback(GstBus* bus, GstMessage* msg, gpointer data);
     
     PipelineConfig config_;
     GstElement* pipeline_;
@@ -32,10 +34,12 @@ private:
     GstElement* pgie_;
     GstElement* tracker_;
     GstElement* analytics_;
+    GstElement* speedcalc_;  // Custom speed calculation plugin
     GstElement* osd_;
     GstElement* sink_;
     
     bool is_live_source_;
+    std::shared_ptr<speedflow::SpeedCalculator> speed_calculator_;
 };
 
 #endif // PIPELINE_BUILDER_H

@@ -1,26 +1,35 @@
-// homography.cpp - Placeholder for Phase 2
-// Will port ViewTransformer from Python
+#include "homography.h"
+#include <stdexcept>
 
-#include <opencv2/opencv.hpp>
-#include <vector>
+namespace speedflow {
 
-// TODO: Implement ViewTransformer class
-// - cv::getPerspectiveTransform() wrapper
-// - transformPoints() method
-// - Port logic from IoT_Graduate/speedflow/homography.py
-
-class ViewTransformer {
-public:
-    ViewTransformer(const std::vector<cv::Point2f>& source,
-                    const std::vector<cv::Point2f>& target) {
-        // Will compute homography matrix here
+ViewTransformer::ViewTransformer(const std::vector<cv::Point2f>& source,
+                                 const std::vector<cv::Point2f>& target) {
+    if (source.size() != 4 || target.size() != 4) {
+        throw std::invalid_argument("ViewTransformer requires exactly 4 source and 4 target points");
     }
     
-    std::vector<cv::Point2f> transformPoints(const std::vector<cv::Point2f>& points) {
-        // Will apply perspective transform here
-        return points;
+    // Compute perspective transformation matrix
+    homography_matrix_ = cv::getPerspectiveTransform(source, target);
+}
+
+std::vector<cv::Point2f> ViewTransformer::transformPoints(
+    const std::vector<cv::Point2f>& points) const {
+    
+    if (points.empty()) {
+        return {};
     }
     
-private:
-    cv::Mat homography_matrix_;
-};
+    std::vector<cv::Point2f> transformed;
+    cv::perspectiveTransform(points, transformed, homography_matrix_);
+    
+    return transformed;
+}
+
+cv::Point2f ViewTransformer::transformPoint(const cv::Point2f& point) const {
+    std::vector<cv::Point2f> input = {point};
+    auto output = transformPoints(input);
+    return output[0];
+}
+
+} // namespace speedflow

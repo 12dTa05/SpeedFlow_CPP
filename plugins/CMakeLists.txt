@@ -4,13 +4,12 @@ cmake_minimum_required(VERSION 3.16)
 # Custom GStreamer Plugin: speedcalc
 # ============================================================================
 
-set(PLUGIN_SOURCES
+add_library(gstspeedplugin SHARED
     gstspeedcalc.cpp
     homography.cpp
+    speed_calculator.cpp
     plugin_register.cpp
 )
-
-add_library(gstspeedplugin SHARED ${PLUGIN_SOURCES})
 
 target_include_directories(gstspeedplugin PRIVATE
     ${CMAKE_SOURCE_DIR}/src
@@ -22,10 +21,10 @@ target_include_directories(gstspeedplugin PRIVATE
 
 target_link_libraries(gstspeedplugin
     ${GSTREAMER_LIBRARIES}
+    ${GSTREAMER_BASE_LIBRARIES}
     ${OpenCV_LIBS}
     nvdsgst_meta
     nvds_meta
-    gstbase-1.0
 )
 
 # Install plugin to GStreamer plugin directory

@@ -4,7 +4,9 @@
 infer_config: ../configs/config_infer_primary_yolo11.txt
 tracker_config: /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_tracker_NvDCF_perf.yml
 analytics_config: ../configs/config_nvdsanalytics.txt
-homography_config: ../configs/points_source_target.yml# Muxer Settings
+homography_config: ../configs/points_source_target.yml
+
+# Muxer Settings
 muxer_width: 1280
 muxer_height: 720
 batch_size: 1

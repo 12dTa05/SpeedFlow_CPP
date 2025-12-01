@@ -68,6 +68,8 @@ set(SPEEDFLOW_SOURCES
     src/pipeline_builder.cpp
     src/config_loader.cpp
     src/api_server.cpp
+    plugins/homography.cpp
+    plugins/speed_calculator.cpp
     ${PROTO_SRCS}
 )
 
